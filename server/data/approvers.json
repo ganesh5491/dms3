@@ -1,0 +1,9 @@
+[
+  {
+    "id": "approver-1",
+    "username": "approver@cybaem.com",
+    "role": "approver",
+    "fullName": "John Approver",
+    "masterCopyAccess": false
+  }
+]

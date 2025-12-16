@@ -1,0 +1,9 @@
+[
+  {
+    "id": "issuer-1",
+    "username": "issuer@cybaem.com",
+    "role": "issuer",
+    "fullName": "Jane Issuer",
+    "masterCopyAccess": true
+  }
+]

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "creator-1",
+    "username": "Priyanka.k@cybaemtech.com",
+    "role": "creator",
+    "fullName": "Priyanka K",
+    "masterCopyAccess": false
+  },
+  {
+    "id": "approver-1",
+    "username": "approver@cybaem.com",
+    "role": "approver",
+    "fullName": "John Approver",
+    "masterCopyAccess": false
+  },
+  {
+    "id": "issuer-1",
+    "username": "issuer@cybaem.com",
+    "role": "issuer",
+    "fullName": "Jane Issuer",
+    "masterCopyAccess": true
+  },
+  {
+    "id": "admin-1",
+    "username": "admin@cybaem.com",
+    "role": "admin",
+    "fullName": "Admin User",
+    "masterCopyAccess": true
+  }
+]

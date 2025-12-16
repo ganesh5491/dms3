@@ -1,0 +1,32 @@
+[
+  {
+    "id": "dept-1",
+    "name": "Engineering",
+    "code": "ENG",
+    "createdAt": "2025-12-16T18:29:33.712Z"
+  },
+  {
+    "id": "dept-2",
+    "name": "Quality Assurance",
+    "code": "QA",
+    "createdAt": "2025-12-16T18:29:33.712Z"
+  },
+  {
+    "id": "dept-3",
+    "name": "Operations",
+    "code": "OPS",
+    "createdAt": "2025-12-16T18:29:33.712Z"
+  },
+  {
+    "id": "dept-4",
+    "name": "Finance",
+    "code": "FIN",
+    "createdAt": "2025-12-16T18:29:33.712Z"
+  },
+  {
+    "id": "dept-5",
+    "name": "Human Resources",
+    "code": "HR",
+    "createdAt": "2025-12-16T18:29:33.712Z"
+  }
+]
