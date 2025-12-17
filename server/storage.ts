@@ -238,8 +238,11 @@ export class DatabaseStorage implements IStorage {
     if (recipients.length === 0) return [];
     
     const docIds = recipients.map(r => r.documentId);
-    const allDocs = await db.select().from(documents).where(eq(documents.status, 'issued'));
-    return allDocs.filter(d => docIds.includes(d.id));
+    return db.select().from(documents)
+      .where(and(
+        eq(documents.status, 'issued'),
+        inArray(documents.id, docIds)
+      ));
   }
 }
 
