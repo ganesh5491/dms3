@@ -6,14 +6,9 @@ import { pdfService } from "./services/pdf-service";
 
 const app = express();
 
-// Enable CORS for Netlify frontend
+// Enable CORS for all origins (Render, Netlify, local development)
 app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "http://localhost:5000",
-    /\.netlify\.app$/,
-    /\.netlify\.com$/
-  ],
+  origin: true,
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]

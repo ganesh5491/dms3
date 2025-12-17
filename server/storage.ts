@@ -1,6 +1,14 @@
-import fs from "fs/promises";
-import path from "path";
+import { eq, desc, and, sql } from "drizzle-orm";
+import { db } from "./db";
 import { 
+  users,
+  documents,
+  departments,
+  notifications,
+  documentDepartments,
+  controlCopies,
+  printLogs,
+  documentRecipients,
   type User, 
   type InsertUser, 
   type Document,
@@ -55,405 +63,184 @@ export interface IStorage {
   getUserAccessibleDocuments(userId: string): Promise<Document[]>;
 }
 
-interface JsonData {
-  users: User[];
-  documents: Document[];
-  departments: Department[];
-  notifications: Notification[];
-  documentDepartments: Array<{ documentId: string; departmentId: string }>;
-  controlCopies: ControlCopy[];
-  printLogs: PrintLog[];
-  documentRecipients: DocumentRecipient[];
-}
-
-export class JsonStorage implements IStorage {
-  private dataPath = path.join(process.cwd(), "server/data/data.json");
-  private data: JsonData = {
-    users: [],
-    documents: [],
-    departments: [],
-    notifications: [],
-    documentDepartments: [],
-    controlCopies: [],
-    printLogs: [],
-    documentRecipients: []
-  };
-  private ready: Promise<void>;
-  private saveQueue: Promise<void> = Promise.resolve();
-
-  constructor() {
-    this.ready = this.loadData();
-  }
-
-  private async loadData(): Promise<void> {
-    try {
-      const fileContent = await fs.readFile(this.dataPath, "utf-8");
-      this.data = JSON.parse(fileContent);
-    } catch (error) {
-      await this.initializeData();
-    }
-  }
-
-  private async initializeData(): Promise<void> {
-    this.data = {
-      users: [
-        {
-          id: "creator-1",
-          username: "Priyanka.k@cybaemtech.com",
-          password: "123",
-          role: "creator",
-          fullName: "Priyanka K",
-          masterCopyAccess: false
-        },
-        {
-          id: "approver-1",
-          username: "approver@cybaem.com",
-          password: "123",
-          role: "approver",
-          fullName: "John Approver",
-          masterCopyAccess: false
-        },
-        {
-          id: "issuer-1",
-          username: "issuer@cybaem.com",
-          password: "123",
-          role: "issuer",
-          fullName: "Jane Issuer",
-          masterCopyAccess: true
-        },
-        {
-          id: "admin-1",
-          username: "admin@cybaem.com",
-          password: "123",
-          role: "admin",
-          fullName: "Admin User",
-          masterCopyAccess: true
-        }
-      ],
-      departments: [
-        { id: "dept-1", name: "Engineering", code: "ENG", createdAt: new Date() },
-        { id: "dept-2", name: "Quality Assurance", code: "QA", createdAt: new Date() },
-        { id: "dept-3", name: "Operations", code: "OPS", createdAt: new Date() },
-        { id: "dept-4", name: "Finance", code: "FIN", createdAt: new Date() },
-        { id: "dept-5", name: "Human Resources", code: "HR", createdAt: new Date() }
-      ],
-      documents: [],
-      notifications: [],
-      documentDepartments: [],
-      controlCopies: [],
-      printLogs: [],
-      documentRecipients: []
-    };
-    await this.saveData();
-  }
-
-  private async saveData(): Promise<void> {
-    this.saveQueue = this.saveQueue.then(async () => {
-      await fs.writeFile(this.dataPath, JSON.stringify(this.data, null, 2));
-    });
-    await this.saveQueue;
-  }
-
+export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    await this.ready;
-    return this.data.users.find(u => u.id === id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    await this.ready;
-    return this.data.users.find(u => u.username === username);
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    await this.ready;
-    const user: User = {
-      id: `user-${Date.now()}`,
-      username: insertUser.username,
-      password: insertUser.password,
-      role: insertUser.role || "creator",
-      fullName: insertUser.fullName,
-      masterCopyAccess: insertUser.masterCopyAccess ?? false
-    };
-    this.data.users.push(user);
-    await this.saveData();
+    const [user] = await db.insert(users).values(insertUser).returning();
     return user;
   }
 
   async deleteUser(id: string): Promise<void> {
-    await this.ready;
-    const index = this.data.users.findIndex(u => u.id === id);
-    if (index === -1) {
+    const result = await db.delete(users).where(eq(users.id, id)).returning();
+    if (result.length === 0) {
       throw new Error(`User with id ${id} not found`);
     }
-    this.data.users.splice(index, 1);
-    await this.saveData();
   }
 
   async getDocument(id: string): Promise<Document | undefined> {
-    await this.ready;
-    return this.data.documents.find(d => d.id === id);
+    const [doc] = await db.select().from(documents).where(eq(documents.id, id));
+    return doc;
   }
 
   async getDocumentsByStatus(status: string): Promise<Document[]> {
-    await this.ready;
-    return this.data.documents
-      .filter(d => d.status === status)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return db.select().from(documents).where(eq(documents.status, status)).orderBy(desc(documents.createdAt));
   }
 
   async getDocumentsByUser(userId: string): Promise<Document[]> {
-    await this.ready;
-    return this.data.documents
-      .filter(d => d.preparedBy === userId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return db.select().from(documents).where(eq(documents.preparedBy, userId)).orderBy(desc(documents.createdAt));
   }
 
   async createDocument(insertDocument: InsertDocument): Promise<Document> {
-    await this.ready;
-    const doc: Document = {
-      id: `doc-${Date.now()}`,
-      docName: insertDocument.docName,
-      docNumber: insertDocument.docNumber,
-      status: "pending",
-      dateOfIssue: insertDocument.dateOfIssue || null,
-      revisionNo: insertDocument.revisionNo || 0,
-      preparedBy: insertDocument.preparedBy,
-      approvedBy: null,
-      issuedBy: null,
-      content: insertDocument.content || null,
-      headerInfo: insertDocument.headerInfo || null,
-      footerInfo: insertDocument.footerInfo || null,
-      duePeriodYears: insertDocument.duePeriodYears || null,
-      reasonForRevision: insertDocument.reasonForRevision || null,
-      reviewDueDate: insertDocument.reviewDueDate || null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      approvedAt: null,
-      issuedAt: null,
-      approvalRemarks: insertDocument.approvalRemarks || null,
-      declineRemarks: insertDocument.declineRemarks || null,
-      issueRemarks: null,
-      issuerName: null,
-      previousVersionId: insertDocument.previousVersionId || null,
-      pdfFilePath: null,
-      wordFilePath: null
-    };
-    this.data.documents.push(doc);
-    await this.saveData();
+    const [doc] = await db.insert(documents).values({
+      ...insertDocument,
+      status: "pending"
+    }).returning();
     return doc;
   }
 
   async updateDocument(id: string, updates: Partial<Document>): Promise<Document | undefined> {
-    await this.ready;
-    const index = this.data.documents.findIndex(d => d.id === id);
-    if (index === -1) return undefined;
-    
-    this.data.documents[index] = {
-      ...this.data.documents[index],
-      ...updates,
-      updatedAt: new Date()
-    };
-    await this.saveData();
-    return this.data.documents[index];
+    const [doc] = await db.update(documents)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(documents.id, id))
+      .returning();
+    return doc;
   }
 
   async getDepartments(): Promise<Department[]> {
-    await this.ready;
-    return this.data.departments;
+    return db.select().from(departments);
   }
 
   async createDepartment(insertDepartment: InsertDepartment): Promise<Department> {
-    await this.ready;
-    const dept: Department = {
-      ...insertDepartment,
-      id: `dept-${Date.now()}`,
-      createdAt: new Date()
-    };
-    this.data.departments.push(dept);
-    await this.saveData();
+    const [dept] = await db.insert(departments).values(insertDepartment).returning();
     return dept;
   }
 
   async deleteDepartment(id: string): Promise<void> {
-    await this.ready;
-    const index = this.data.departments.findIndex(d => d.id === id);
-    if (index === -1) {
+    await db.delete(documentDepartments).where(eq(documentDepartments.departmentId, id));
+    const result = await db.delete(departments).where(eq(departments.id, id)).returning();
+    if (result.length === 0) {
       throw new Error(`Department with id ${id} not found`);
     }
-    this.data.departments.splice(index, 1);
-    // Also remove any document-department associations
-    this.data.documentDepartments = this.data.documentDepartments.filter(
-      dd => dd.departmentId !== id
-    );
-    await this.saveData();
   }
 
   async assignDocumentToDepartments(documentId: string, departmentIds: string[]): Promise<void> {
-    await this.ready;
-    this.data.documentDepartments = this.data.documentDepartments.filter(
-      dd => dd.documentId !== documentId
-    );
-    
-    for (const deptId of departmentIds) {
-      this.data.documentDepartments.push({ documentId, departmentId: deptId });
+    await db.delete(documentDepartments).where(eq(documentDepartments.documentId, documentId));
+    if (departmentIds.length > 0) {
+      await db.insert(documentDepartments).values(
+        departmentIds.map(departmentId => ({ documentId, departmentId }))
+      );
     }
-    
-    await this.saveData();
   }
 
   async getDocumentDepartments(documentId: string): Promise<Department[]> {
-    await this.ready;
-    const deptIds = this.data.documentDepartments
-      .filter(dd => dd.documentId === documentId)
-      .map(dd => dd.departmentId);
+    const docDepts = await db.select()
+      .from(documentDepartments)
+      .where(eq(documentDepartments.documentId, documentId));
     
-    return this.data.departments.filter(d => deptIds.includes(d.id));
+    if (docDepts.length === 0) return [];
+    
+    const deptIds = docDepts.map(dd => dd.departmentId);
+    const result = await db.select().from(departments);
+    return result.filter(d => deptIds.includes(d.id));
   }
 
   async createNotification(insertNotification: InsertNotification): Promise<Notification> {
-    await this.ready;
-    const notification: Notification = {
-      ...insertNotification,
-      id: `notif-${Date.now()}-${Math.random()}`,
-      isRead: false,
-      createdAt: new Date()
-    };
-    this.data.notifications.push(notification);
-    await this.saveData();
-    return notification;
+    const [notif] = await db.insert(notifications).values(insertNotification).returning();
+    return notif;
   }
 
   async getUserNotifications(userId: string): Promise<Notification[]> {
-    await this.ready;
-    return this.data.notifications
-      .filter(n => n.userId === userId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return db.select().from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt));
   }
 
   async markNotificationAsRead(id: string): Promise<void> {
-    await this.ready;
-    const notification = this.data.notifications.find(n => n.id === id);
-    if (notification) {
-      notification.isRead = true;
-      await this.saveData();
-    }
+    await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
   }
 
   async getUsersByRole(role: string): Promise<User[]> {
-    await this.ready;
-    return this.data.users.filter(u => u.role === role);
+    return db.select().from(users).where(eq(users.role, role));
   }
 
   async createControlCopy(insertControlCopy: Omit<InsertControlCopy, 'copyNumber'>): Promise<ControlCopy> {
-    await this.ready;
+    const existingCopies = await db.select()
+      .from(controlCopies)
+      .where(and(
+        eq(controlCopies.documentId, insertControlCopy.documentId),
+        eq(controlCopies.userId, insertControlCopy.userId)
+      ));
     
-    return new Promise((resolve, reject) => {
-      this.saveQueue = this.saveQueue.then(async () => {
-        try {
-          const copyNumber = await this.getNextCopyNumber(insertControlCopy.documentId, insertControlCopy.userId);
-          const controlCopy: ControlCopy = {
-            id: `cc-${Date.now()}-${Math.random()}`,
-            documentId: insertControlCopy.documentId,
-            userId: insertControlCopy.userId,
-            actionType: insertControlCopy.actionType,
-            copyNumber,
-            generatedAt: new Date()
-          };
-          this.data.controlCopies.push(controlCopy);
-          await fs.writeFile(this.dataPath, JSON.stringify(this.data, null, 2));
-          resolve(controlCopy);
-        } catch (error) {
-          reject(error);
-        }
-      });
-    });
+    const copyNumber = existingCopies.length === 0 ? 1 : Math.max(...existingCopies.map(cc => cc.copyNumber)) + 1;
+    
+    const [cc] = await db.insert(controlCopies).values({
+      ...insertControlCopy,
+      copyNumber
+    }).returning();
+    return cc;
   }
 
   async getControlCopiesByDocument(documentId: string): Promise<ControlCopy[]> {
-    await this.ready;
-    return this.data.controlCopies
-      .filter(cc => cc.documentId === documentId)
-      .sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
+    return db.select().from(controlCopies)
+      .where(eq(controlCopies.documentId, documentId))
+      .orderBy(desc(controlCopies.generatedAt));
   }
 
   async getControlCopiesByUser(userId: string): Promise<ControlCopy[]> {
-    await this.ready;
-    return this.data.controlCopies
-      .filter(cc => cc.userId === userId)
-      .sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
-  }
-
-  async getNextCopyNumber(documentId: string, userId: string): Promise<number> {
-    await this.ready;
-    const userCopies = this.data.controlCopies.filter(
-      cc => cc.documentId === documentId && cc.userId === userId
-    );
-    if (userCopies.length === 0) return 1;
-    return Math.max(...userCopies.map(cc => cc.copyNumber)) + 1;
+    return db.select().from(controlCopies)
+      .where(eq(controlCopies.userId, userId))
+      .orderBy(desc(controlCopies.generatedAt));
   }
 
   async createPrintLog(insertPrintLog: InsertPrintLog): Promise<PrintLog> {
-    await this.ready;
-    const printLog: PrintLog = {
-      id: `pl-${Date.now()}-${Math.random()}`,
-      documentId: insertPrintLog.documentId,
-      userId: insertPrintLog.userId,
-      controlCopyId: insertPrintLog.controlCopyId,
-      medium: insertPrintLog.medium || null,
-      printedAt: new Date()
-    };
-    this.data.printLogs.push(printLog);
-    await this.saveData();
-    return printLog;
+    const [log] = await db.insert(printLogs).values(insertPrintLog).returning();
+    return log;
   }
 
   async getPrintLogsByDocument(documentId: string): Promise<PrintLog[]> {
-    await this.ready;
-    return this.data.printLogs
-      .filter(pl => pl.documentId === documentId)
-      .sort((a, b) => new Date(b.printedAt).getTime() - new Date(a.printedAt).getTime());
+    return db.select().from(printLogs)
+      .where(eq(printLogs.documentId, documentId))
+      .orderBy(desc(printLogs.printedAt));
   }
 
   async getPrintLogsByUser(userId: string): Promise<PrintLog[]> {
-    await this.ready;
-    return this.data.printLogs
-      .filter(pl => pl.userId === userId)
-      .sort((a, b) => new Date(b.printedAt).getTime() - new Date(a.printedAt).getTime());
+    return db.select().from(printLogs)
+      .where(eq(printLogs.userId, userId))
+      .orderBy(desc(printLogs.printedAt));
   }
 
   async createDocumentRecipient(insertRecipient: InsertDocumentRecipient): Promise<DocumentRecipient> {
-    await this.ready;
-    
     if (!insertRecipient.userId && !insertRecipient.departmentId) {
       throw new Error("Document recipient must have either userId or departmentId");
     }
-    
-    const recipient: DocumentRecipient = {
-      id: `dr-${Date.now()}-${Math.random()}`,
-      documentId: insertRecipient.documentId,
-      userId: insertRecipient.userId || null,
-      departmentId: insertRecipient.departmentId || null,
-      notifiedAt: new Date(),
-      readAt: null
-    };
-    this.data.documentRecipients.push(recipient);
-    await this.saveData();
+    const [recipient] = await db.insert(documentRecipients).values(insertRecipient).returning();
     return recipient;
   }
 
   async getDocumentRecipients(documentId: string): Promise<DocumentRecipient[]> {
-    await this.ready;
-    return this.data.documentRecipients.filter(dr => dr.documentId === documentId);
+    return db.select().from(documentRecipients).where(eq(documentRecipients.documentId, documentId));
   }
 
   async getUserAccessibleDocuments(userId: string): Promise<Document[]> {
-    await this.ready;
-    const accessibleDocIds = this.data.documentRecipients
-      .filter(dr => dr.userId === userId)
-      .map(dr => dr.documentId);
+    const recipients = await db.select()
+      .from(documentRecipients)
+      .where(eq(documentRecipients.userId, userId));
     
-    return this.data.documents.filter(d => accessibleDocIds.includes(d.id) && d.status === 'issued');
+    if (recipients.length === 0) return [];
+    
+    const docIds = recipients.map(r => r.documentId);
+    const allDocs = await db.select().from(documents).where(eq(documents.status, 'issued'));
+    return allDocs.filter(d => docIds.includes(d.id));
   }
 }
 
-export const storage = new JsonStorage();
+export const storage = new DatabaseStorage();
